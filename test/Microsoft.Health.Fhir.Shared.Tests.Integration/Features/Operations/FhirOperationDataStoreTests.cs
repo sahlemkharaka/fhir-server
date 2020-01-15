@@ -177,6 +177,31 @@ namespace Microsoft.Health.Fhir.Tests.Integration.Features.Operations
         }
 
         [Fact]
+        [FhirStorageTestsFixtureArgumentSets(DataStore.CosmosDb)]
+        public async Task GivenARunningJob_WhenUpdatingJob_ThenTheJobShouldBeUpdated()
+        {
+            // Create a queued job and set it to running.
+            await InsertNewExportJobRecordAsync();
+            IReadOnlyCollection<ExportJobOutcome> jobOutcomes = await AcquireExportJobsAsync(maximumNumberOfConcurrentJobAllowed: 1);
+
+            Assert.NotNull(jobOutcomes);
+            Assert.Equal(1, jobOutcomes.Count);
+
+            ExportJobOutcome jobOutcome = jobOutcomes.FirstOrDefault();
+            ExportJobRecord job = jobOutcome?.JobRecord;
+
+            Assert.NotNull(jobOutcome);
+            Assert.NotNull(job);
+
+            job.Status = OperationStatus.Completed;
+
+            await _operationDataStore.UpdateExportJobAsync(job, jobOutcome.ETag, CancellationToken.None);
+            ExportJobOutcome updatedJobOutcome = await _operationDataStore.GetExportJobByIdAsync(job.Id, CancellationToken.None);
+
+            ValidateExportJobOutcome(job, updatedJobOutcome?.JobRecord);
+        }
+
+        [Fact]
         public async Task GivenThereIsRunningJobThatExpired_WhenAcquiringJobs_ThenTheExpiredJobShouldBeReturned()
         {
             // Create a job and set it to running.
