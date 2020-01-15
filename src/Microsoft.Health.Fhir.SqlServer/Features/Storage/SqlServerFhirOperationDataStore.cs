@@ -72,10 +72,31 @@ namespace Microsoft.Health.Fhir.SqlServer.Features.Storage
             return Task.FromResult<ExportJobOutcome>(null);
         }
 
-        public Task<ExportJobOutcome> UpdateExportJobAsync(ExportJobRecord jobRecord, WeakETag eTag, CancellationToken cancellationToken)
+        public async Task<ExportJobOutcome> UpdateExportJobAsync(ExportJobRecord jobRecord, WeakETag eTag, CancellationToken cancellationToken)
         {
-            // TODO: Implement this method.
-            return Task.FromResult(new ExportJobOutcome(jobRecord, eTag));
+            using (SqlConnectionWrapper sqlConnectionWrapper = _sqlConnectionWrapperFactory.ObtainSqlConnectionWrapper(true))
+            using (SqlCommand sqlCommand = sqlConnectionWrapper.CreateSqlCommand())
+            {
+                // We will timestamp the jobs when we update them to track stale jobs.
+                DateTimeOffset heartbeatTimeStamp = Clock.UtcNow;
+
+                V1.UpdateExportJob.PopulateCommand(
+                    sqlCommand,
+                    jobRecord.Id,
+                    jobRecord.Status.ToString(),
+                    heartbeatTimeStamp,
+                    jobRecord.QueuedTime,
+                    JsonConvert.SerializeObject(jobRecord));
+
+                var rowVersion = (int?)await sqlCommand.ExecuteScalarAsync(cancellationToken);
+
+                if (rowVersion == null)
+                {
+                    throw new OperationFailedException(string.Format(Core.Resources.OperationFailed, OperationsConstants.Export, Resources.NullRowVersion), HttpStatusCode.InternalServerError);
+                }
+
+                return new ExportJobOutcome(jobRecord, WeakETag.FromVersionId(rowVersion.ToString()));
+            }
         }
 
         public async Task<IReadOnlyCollection<ExportJobOutcome>> AcquireExportJobsAsync(ushort maximumNumberOfConcurrentJobsAllowed, TimeSpan jobHeartbeatTimeoutThreshold, CancellationToken cancellationToken)

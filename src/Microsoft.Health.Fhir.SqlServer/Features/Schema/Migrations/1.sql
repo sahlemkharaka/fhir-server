@@ -1382,6 +1382,49 @@ AS
     COMMIT TRANSACTION
 GO
 
+--
+-- STORED PROCEDURE
+--     Updates an export job.
+--
+-- DESCRIPTION
+--     Modifies an existing job in the ExportJob table.
+--
+-- PARAMETERS
+--     @id
+--         * The ID of the export job record
+--     @status
+--         * The status of the export job
+--     @queuedDateTime
+--         * The time the export job is queued
+--     @heartbeatDateTime
+--         * The time to be stamped on the updated export job
+--     @rawJobRecord
+--         * A JSON document
+--
+-- RETURN VALUE
+--     The row version of the updated export job.
+--
+CREATE PROCEDURE dbo.UpdateExportJob
+    @id varchar(64),
+    @status varchar(10),
+    @heartbeatDateTime datetimeoffset(7),
+    @queuedDateTime datetimeoffset(7),
+    @rawJobRecord varchar(max)
+AS
+    SET NOCOUNT ON
+
+    SET XACT_ABORT ON
+    BEGIN TRANSACTION
+
+    UPDATE dbo.ExportJob
+    SET Status = @status, HeartbeatDateTime = @heartbeatDateTime, QueuedDateTime = @queuedDateTime, @rawJobRecord = RawJobRecord
+    WHERE Id = @id
+  
+    SELECT CAST(MIN_ACTIVE_ROWVERSION() AS INT)
+
+    COMMIT TRANSACTION
+GO
+
 /*************************************************************
     Sequence for generating unique 12.5ns "tick" components that are added
     to a base ID based on the timestamp to form a unique resource surrogate ID
