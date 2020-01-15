@@ -61,9 +61,37 @@ namespace Microsoft.Health.Fhir.SqlServer.Features.Storage
             }
         }
 
-        public Task<ExportJobOutcome> GetExportJobByIdAsync(string id, CancellationToken cancellationToken)
+        public async Task<ExportJobOutcome> GetExportJobByIdAsync(string id, CancellationToken cancellationToken)
         {
-            throw new NotImplementedException();
+            EnsureArg.IsNotNullOrWhiteSpace(id, nameof(id));
+
+            using (SqlConnectionWrapper sqlConnectionWrapper = _sqlConnectionWrapperFactory.ObtainSqlConnectionWrapper(true))
+            using (SqlCommand sqlCommand = sqlConnectionWrapper.CreateSqlCommand())
+            {
+                V1.GetExportJobById.PopulateCommand(sqlCommand, id);
+
+                using (SqlDataReader sqlDataReader = await sqlCommand.ExecuteReaderAsync(CommandBehavior.SequentialAccess, cancellationToken))
+                {
+                    if (!sqlDataReader.Read())
+                    {
+                        throw new JobNotFoundException(string.Format(Core.Resources.JobNotFound, id));
+                    }
+
+                    (string rawJobRecord, byte[] rowVersionAsBytes) = sqlDataReader.ReadRow(V1.ExportJob.RawJobRecord, V1.ExportJob.JobVersion);
+
+                    var exportJobRecord = JsonConvert.DeserializeObject<ExportJobRecord>(rawJobRecord);
+
+                    if (BitConverter.IsLittleEndian)
+                    {
+                        Array.Reverse(rowVersionAsBytes);
+                    }
+
+                    const int startIndex = 0;
+                    var rowVersionAsDecimalString = BitConverter.ToInt32(rowVersionAsBytes, startIndex).ToString();
+
+                    return new ExportJobOutcome(exportJobRecord, WeakETag.FromVersionId(rowVersionAsDecimalString));
+                }
+            }
         }
 
         public Task<ExportJobOutcome> GetExportJobByHashAsync(string hash, CancellationToken cancellationToken)
@@ -74,6 +102,8 @@ namespace Microsoft.Health.Fhir.SqlServer.Features.Storage
 
         public async Task<ExportJobOutcome> UpdateExportJobAsync(ExportJobRecord jobRecord, WeakETag eTag, CancellationToken cancellationToken)
         {
+            EnsureArg.IsNotNull(jobRecord, nameof(jobRecord));
+
             using (SqlConnectionWrapper sqlConnectionWrapper = _sqlConnectionWrapperFactory.ObtainSqlConnectionWrapper(true))
             using (SqlCommand sqlCommand = sqlConnectionWrapper.CreateSqlCommand())
             {
