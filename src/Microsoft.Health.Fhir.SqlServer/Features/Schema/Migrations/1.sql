@@ -1256,6 +1256,7 @@ GO
 CREATE TABLE dbo.ExportJob
 (
     Id varchar(64) COLLATE Latin1_General_100_CS_AS NOT NULL,
+    Hash varchar(64) COLLATE Latin1_General_100_CS_AS NOT NULL,
     Status varchar(10) NOT NULL,
     HeartbeatDateTime datetimeoffset(7) NULL,
     QueuedDateTime datetimeoffset(7) NOT NULL,
@@ -1268,8 +1269,9 @@ CREATE UNIQUE CLUSTERED INDEX IXC_ExportJob ON dbo.ExportJob
     Id
 )
 
-CREATE UNIQUE NONCLUSTERED INDEX IX_ExportJob_Status_HeartbeatDateTime_QueuedDateTime ON dbo.ExportJob
+CREATE UNIQUE NONCLUSTERED INDEX IX_ExportJob_Hash_Status_HeartbeatDateTime_QueuedDateTime ON dbo.ExportJob
 (
+    Hash,
     Status,
     HeartbeatDateTime,
     QueuedDateTime
@@ -1290,6 +1292,8 @@ GO
 -- PARAMETERS
 --     @id
 --         * The ID of the export job record
+--     @hash
+--         * The SHA256 hash of the export job record ID
 --     @status
 --         * The status of the export job
 --     @queuedDateTime
@@ -1302,6 +1306,7 @@ GO
 --
 CREATE PROCEDURE dbo.CreateExportJob
     @id varchar(64),
+    @hash varchar(64),
     @status varchar(10),
     @queuedDateTime datetimeoffset(7),
     @rawJobRecord varchar(max)
@@ -1312,9 +1317,9 @@ AS
     BEGIN TRANSACTION
 
     INSERT INTO dbo.ExportJob
-        (Id, Status, QueuedDateTime, RawJobRecord)
+        (Id, Hash, Status, QueuedDateTime, RawJobRecord)
     VALUES
-        (@id, @status, @queuedDateTime, @rawJobRecord)
+        (@id, @hash, @status, @queuedDateTime, @rawJobRecord)
   
     SELECT CAST(MIN_ACTIVE_ROWVERSION() AS INT)
 
