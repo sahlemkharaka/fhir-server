@@ -1357,6 +1357,36 @@ GO
 
 --
 -- STORED PROCEDURE
+--     Gets an export job given the hash of its ID.
+--
+-- DESCRIPTION
+--     Retrieves the export job record from the ExportJob table that has the matching hash.
+--
+-- PARAMETERS
+--     @hash
+--         * The SHA256 hash of the export job record ID
+--
+-- RETURN VALUE
+--     The matching export job.
+--
+CREATE PROCEDURE dbo.GetExportJobByHash
+    @hash varchar(64)
+AS
+    SET NOCOUNT ON
+
+    SET XACT_ABORT ON
+    BEGIN TRANSACTION
+
+    SELECT TOP(1) RawJobRecord, JobVersion
+    FROM dbo.ExportJob
+    WHERE Hash = @hash AND (Status = 'Queued' OR Status = 'Running')
+    ORDER BY HeartbeatDateTime, QueuedDateTime
+
+    COMMIT TRANSACTION
+GO
+
+--
+-- STORED PROCEDURE
 --     Acquires export jobs.
 --
 -- DESCRIPTION
@@ -1396,7 +1426,7 @@ AS
 
     -- Get the available jobs, which are export jobs that are queued or stale.
     INSERT INTO @availableJobs
-    SELECT TOP (@limit) Id, JobVersion
+    SELECT TOP(@limit) Id, JobVersion
     FROM dbo.ExportJob
     WHERE (Status = 'Queued' OR (Status = 'Running' AND HeartbeatDateTime <= @expirationDateTime))
     ORDER BY HeartbeatDateTime, QueuedDateTime
